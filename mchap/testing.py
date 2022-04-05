@@ -1,8 +1,6 @@
 import numpy as np
 
-from mchap.encoding.integer import as_probabilistic
-from mchap.io.util import prob_of_qual, PFEIFFER_ERROR
-from mchap.jitutils import sample_snv_alleles
+from mchap.io.util import PFEIFFER_ERROR
 
 
 def simulate_reads(
@@ -12,7 +10,6 @@ def simulate_reads(
     uniform_sample=False,
     errors=True,
     error_rate=PFEIFFER_ERROR,
-    qual=(30, 60),
 ):
     """Simulate reads from haplotypes for tests.
 
@@ -37,8 +34,8 @@ def simulate_reads(
 
     Returns
     -------
-    reads : ndarray, int, (n_reads, n_base, max_allele)
-        Simulated reads encoded as probability distributions.
+    reads : ndarray, int, (n_reads, n_base)
+        Simulated reads encoded as integers.
 
     Notes
     -----
@@ -47,27 +44,27 @@ def simulate_reads(
     simulation of real molecular data.
 
     """
-    ploidy, _ = haplotypes.shape
+    ploidy, n_pos = haplotypes.shape
     if n_alleles is None:
         n_alleles = np.max(haplotypes) + 1
-    else:
-        n_alleles = n_alleles
+    if isinstance(n_alleles, int):
+        n_alleles = np.repeat(n_alleles, n_pos)
 
     # reads are a sample of haplotypes
     if uniform_sample:
-        read_haps = np.tile(haplotypes, (n_reads // ploidy, 1))
+        reads = np.tile(haplotypes, (n_reads // ploidy, 1))
     else:
-        read_haps = haplotypes[np.random.randint(0, ploidy, n_reads)]
+        reads = haplotypes[np.random.randint(0, ploidy, n_reads)]
 
-    # encode probabilities
-    quals = np.random.randint(qual[0], qual[1] + 1, size=read_haps.shape)
-    probs = prob_of_qual(quals) * (1 - error_rate)
-    reads = as_probabilistic(read_haps, n_alleles, p=probs)
-
-    # re-sample haplotypes from reads to introduce errors
+    # introduce errors
     if errors:
-        read_haps = sample_snv_alleles(reads)
-        reads = as_probabilistic(read_haps, n_alleles, p=probs)
+        error_pos = np.random.choice(
+            [True, False], p=[error_rate, 1 - error_rate], size=reads.shape
+        )
+        n_errors = error_pos.sum()
+        error_calls = np.random.randint(0, 4, n_errors)
+        reads[error_pos] = error_calls
+        reads[reads >= n_alleles] = -1
 
     return reads
 

@@ -15,17 +15,20 @@ __all__ = [
 
 
 @numba.njit(cache=True)
-def log_likelihood(reads, genotype, read_counts=None):
+def log_likelihood(reads, genotype, error_rate, read_counts=None):
     """Log likelihood of observed reads given a genotype.
 
     Parameters
     ----------
-    reads : ndarray, float, shape (n_reads, n_base, n_nucl)
-        Observed reads encoded as an array of
-        probabilistic matrices.
+    reads : ndarray, int, shape (n_reads, n_base)
+        Observed reads with base positions encoded
+        as simple integers from 0 to n_nucl and -1
+        indicating gaps.
     genotype : ndarray, int, shape (ploidy, n_base)
         Set of haplotypes with base positions encoded
         as simple integers from 0 to n_nucl.
+    error_rate : float
+        Expected base calling error rate
     read_counts : ndarray, int, shape (n_reads, )
         Optionally specify the number of observations of
         each read.
@@ -49,15 +52,16 @@ def log_likelihood(reads, genotype, read_counts=None):
         for h in range(ploidy):
             read_hap_prod = 1.0
 
-            for j in range(n_base):
-                i = genotype[h, j]
+            for i in range(n_base):
+                base = genotype[h, i]
+                call = reads[r, i]
 
-                val = reads[r, j, i]
-
-                if np.isnan(val):
+                if call == base:
+                    read_hap_prod *= 1 - error_rate
+                elif call < 0:
                     pass
                 else:
-                    read_hap_prod *= val
+                    read_hap_prod *= error_rate / 3  # assumes biallelic
 
             read_prob += read_hap_prod / ploidy
 
@@ -73,21 +77,24 @@ def log_likelihood(reads, genotype, read_counts=None):
 
 @numba.njit(cache=True)
 def log_likelihood_structural_change(
-    reads, genotype, haplotype_indices, interval=None, read_counts=None
+    reads, genotype, haplotype_indices, error_rate, interval=None, read_counts=None
 ):
     """Log likelihood of observed reads given a genotype given a structural change.
 
     Parameters
     ----------
-    reads : ndarray, float, shape (n_reads, n_base, n_nucl)
-        Observed reads encoded as an array of
-        probabilistic matrices.
+    reads : ndarray, int, shape (n_reads, n_base)
+        Observed reads with base positions encoded
+        as simple integers from 0 to n_nucl and -1
+        indicating gaps.
     genotype : ndarray, int, shape (ploidy, n_base)
         Set of haplotypes with base positions encoded as
         simple integers from 0 to n_nucl.
     haplotype_indices : ndarray, int, shape (ploidy)
         Indicies of haplotypes to use within the
         changed interval.
+    error_rate : float
+        Expected base calling error rate
     interval : tuple, int, shape (2, ), optional
         Interval of base-positions to swap (defaults to
         all base positions).
@@ -130,14 +137,15 @@ def log_likelihood_structural_change(
                     h_ = h
 
                 # get nucleotide index
-                i = genotype[h_, j]
+                base = genotype[h_, j]
+                call = reads[r, j]
 
-                val = reads[r, j, i]
-
-                if np.isnan(val):
+                if call == base:
+                    read_hap_prod *= 1 - error_rate
+                elif call < 0:
                     pass
                 else:
-                    read_hap_prod *= val
+                    read_hap_prod *= error_rate / 3  # assumes biallelic
 
             read_prob += read_hap_prod / ploidy
 
@@ -195,17 +203,20 @@ def new_log_likelihood_cache(ploidy, n_base, max_alleles, max_size=2**16):
 
 
 @numba.njit(cache=True)
-def log_likelihood_cached(reads, genotype, read_counts=None, cache=None):
+def log_likelihood_cached(reads, genotype, error_rate, read_counts=None, cache=None):
     """Log likelihood of observed reads given a genotype with caching.
 
     Parameters
     ----------
-    reads : ndarray, float, shape (n_reads, n_base, n_nucl)
-        Observed reads encoded as an array of
-        probabilistic matrices.
+    reads : ndarray, int, shape (n_reads, n_base)
+        Observed reads with base positions encoded
+        as simple integers from 0 to n_nucl and -1
+        indicating gaps.
     genotype : ndarray, int, shape (ploidy, n_base)
         Set of haplotypes with base positions encoded
         as simple integers from 0 to n_nucl.
+    error_rate : float
+        Expected base calling error rate
     read_counts : ndarray, int, shape (n_reads, )
         Optionally specify the number of observations of
         each read.
@@ -225,14 +236,24 @@ def log_likelihood_cached(reads, genotype, read_counts=None, cache=None):
     hence existing references to the array_map should not be reused.
     """
     if cache is None:
-        llk = log_likelihood(reads, genotype, read_counts=read_counts)
+        llk = log_likelihood(
+            reads,
+            genotype,
+            error_rate=error_rate,
+            read_counts=read_counts,
+        )
         return llk, cache
 
     # try retrive from cache
     llk = arraymap.get(cache, genotype.ravel())
     if np.isnan(llk):
         # calculate and update cache
-        llk = log_likelihood(reads, genotype, read_counts=read_counts)
+        llk = log_likelihood(
+            reads,
+            genotype,
+            error_rate=error_rate,
+            read_counts=read_counts,
+        )
         # the cache will emptied if it is full
         cache = arraymap.set(cache, genotype.ravel(), llk, empty_if_full=True)
     return llk, cache
@@ -243,6 +264,7 @@ def log_likelihood_structural_change_cached(
     reads,
     genotype,
     haplotype_indices,
+    error_rate,
     interval=None,
     read_counts=None,
     cache=None,
@@ -251,15 +273,18 @@ def log_likelihood_structural_change_cached(
 
     Parameters
     ----------
-    reads : ndarray, float, shape (n_reads, n_base, n_nucl)
-        Observed reads encoded as an array of
-        probabilistic matrices.
+    reads : ndarray, int, shape (n_reads, n_base)
+        Observed reads with base positions encoded
+        as simple integers from 0 to n_nucl and -1
+        indicating gaps.
     genotype : ndarray, int, shape (ploidy, n_base)
         Set of haplotypes with base positions encoded as
         simple integers from 0 to n_nucl.
     haplotype_indices : ndarray, int, shape (ploidy)
         Indicies of haplotypes to use within the
         changed interval.
+    error_rate : float
+        Expected base calling error rate
     interval : tuple, int, shape (2, ), optional
         Interval of base-positions to swap (defaults to
         all base positions).
@@ -283,6 +308,7 @@ def log_likelihood_structural_change_cached(
             reads=reads,
             genotype=genotype,
             haplotype_indices=haplotype_indices,
+            error_rate=error_rate,
             interval=interval,
             read_counts=read_counts,
         )
@@ -300,9 +326,10 @@ def log_likelihood_structural_change_cached(
             reads=reads,
             genotype=genotype,
             haplotype_indices=haplotype_indices,
+            error_rate=error_rate,
             interval=interval,
             read_counts=read_counts,
         )
-        # the cache will emptied if it is full
+        # the cache will be emptied if it is full
         cache = arraymap.set(cache, genotype_new.ravel(), llk, empty_if_full=True)
     return llk, cache
