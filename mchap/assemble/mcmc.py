@@ -95,14 +95,18 @@ class DenovoMCMC(Assembler):
 
     """
 
-    def fit(self, reads, read_counts=None, initial=None):
+    def fit(self, reads, error_rate, read_counts=None, initial=None):
         """Fit the parametized model to a set of probabilistically
         encoded variable positions of NGS reads.
 
         Parameters
         ----------
-        reads : ndarray, float, shape (n_reads, n_positions, max_allele)
-            Probabilistically encoded variable positions of NGS reads.
+        reads : ndarray, int, shape (n_reads, n_base)
+            Observed reads with base positions encoded
+            as simple integers from 0 to n_nucl and -1
+            indicating gaps.
+        error_rate : float
+            Expected base calling error rate
         read_counts : ndarray, int, shape (n_reads, )
             Optionally specify the number of observations of each read.
         initial : ndarray, int, shape (n_chains, ploidy, n_positions, max_allele), optional
@@ -123,13 +127,13 @@ class DenovoMCMC(Assembler):
         among all reads.
 
         """
-        n_reads, n_pos, max_allele = reads.shape
+        n_reads, n_pos = reads.shape
         if n_reads == 0:
             # mock up a nan read
             assert len(self.n_alleles) == n_pos
             n_reads = 1
-            reads = np.empty((n_reads, n_pos, max_allele), dtype=float)
-            reads[:] = np.nan
+            reads = np.empty((n_reads, n_pos), dtype=np.int8)
+            reads[:] = -1
 
         # set random seed once for all chains
         if self.random_seed is not None:
@@ -144,7 +148,10 @@ class DenovoMCMC(Assembler):
         llks = []
         for chain in range(self.chains):
             gen_trace, llk_trace = self._mcmc(
-                reads, read_counts=read_counts, initial=initial[chain]
+                reads,
+                read_counts=read_counts,
+                error_rate=error_rate,
+                initial=initial[chain],
             )
             genotypes.append(gen_trace)
             llks.append(llk_trace)
@@ -155,7 +162,7 @@ class DenovoMCMC(Assembler):
             np.array(llks),
         )
 
-    def _mcmc(self, reads, read_counts, initial=None):
+    def _mcmc(self, reads, read_counts, error_rate, initial=None):
         """Run a single MCMC simulation."""
         # identify base positions that are overwhelmingly likely
         # to be homozygous
@@ -164,6 +171,7 @@ class DenovoMCMC(Assembler):
             reads,
             self.n_alleles,
             self.ploidy,
+            error_rate=error_rate,
             inbreeding=self.inbreeding,
             read_counts=read_counts,
         )
@@ -176,8 +184,8 @@ class DenovoMCMC(Assembler):
         reads_het = reads[:, heterozygous]
 
         # counts of total number of bases and number of het bases
-        _, n_base, _ = reads.shape
-        _, n_het_base, _ = reads_het.shape
+        _, n_base = reads.shape
+        _, n_het_base = reads_het.shape
 
         # if all bases are fixed homozygous we don't need to sample anything
         if n_het_base == 0:
@@ -194,7 +202,9 @@ class DenovoMCMC(Assembler):
 
         # set the initial genotype
         if initial is None:
-            dist = _read_mean_dist(reads_het)
+            dist = _read_mean_dist(
+                reads_het, n_alleles=np.array(self.n_alleles), error_rate=error_rate
+            )
             genotype = np.array([sample_snv_alleles(dist) for _ in range(self.ploidy)])
         else:
             # use the provided array
@@ -226,6 +236,7 @@ class DenovoMCMC(Assembler):
             inbreeding=self.inbreeding,
             reads=reads_het,
             read_counts=read_counts,
+            error_rate=error_rate,
             n_alleles=n_alleles,
             steps=self.steps,
             break_dist=break_dist,
@@ -267,6 +278,7 @@ def _denovo_gibbs_sampler(
     inbreeding,
     reads,
     read_counts,
+    error_rate,
     n_alleles,
     steps,
     break_dist,
@@ -292,7 +304,9 @@ def _denovo_gibbs_sampler(
 
     # likelihood for each genotype at each temp
     llks = np.empty(n_temps)
-    llks[:] = log_likelihood(reads, genotype, read_counts=read_counts)
+    llks[:] = log_likelihood(
+        reads, genotype, read_counts=read_counts, error_rate=error_rate
+    )
 
     # llk cache
     u_reads = len(reads)
@@ -330,6 +344,7 @@ def _denovo_gibbs_sampler(
                 genotype=genotype,
                 inbreeding=inbreeding,
                 reads=reads,
+                error_rate=error_rate,
                 llk=llk,
                 n_alleles=n_alleles,
                 temp=temp,
@@ -345,6 +360,7 @@ def _denovo_gibbs_sampler(
                     genotype=genotype,
                     inbreeding=inbreeding,
                     reads=reads,
+                    error_rate=error_rate,
                     llk=llk,
                     intervals=intervals,
                     n_alleles=n_alleles,
@@ -362,6 +378,7 @@ def _denovo_gibbs_sampler(
                     genotype=genotype,
                     inbreeding=inbreeding,
                     reads=reads,
+                    error_rate=error_rate,
                     llk=llk,
                     intervals=intervals,
                     n_alleles=n_alleles,
@@ -377,6 +394,7 @@ def _denovo_gibbs_sampler(
                     genotype=genotype,
                     inbreeding=inbreeding,
                     reads=reads,
+                    error_rate=error_rate,
                     llk=llk,
                     intervals=np.array([[0, n_base]]),
                     n_alleles=n_alleles,
@@ -446,14 +464,15 @@ def _point_beta_probabilities(n_base, a=1, b=1):
     return probs
 
 
-def _read_mean_dist(reads):
+@numba.njit(cache=True)
+def _read_mean_dist(reads, n_alleles, error_rate):
     """Calculate the element-wise means of a collection of
     probabilistically encoded reads.
 
     Parameters
     ----------
-    reads : ndarray, float, shape (n_reads, n_positions, max_allele)
-        Probabilistically encoded variable positions of NGS reads.
+    reads : ndarray, float, shape (n_reads, n_positions)
+        Integer encoded variable positions of NGS reads.
 
     Returns
     -------
@@ -465,40 +484,50 @@ def _read_mean_dist(reads):
     If read distributions are normalized if they do not sum to 1.
 
     """
-    # work around to avoid nan values caused by gaps
-    reads = reads.copy()
-    n_reads = len(reads)
-    gaps = np.isnan(reads).all(axis=0)
-
-    # replace gaps with 1
-    reads[np.tile(gaps, (n_reads, 1, 1))] = 1
-    dist = np.nanmean(reads, axis=0)
-
-    # fill gaps
-    n_alleles = np.sum(~np.all(reads == 0, axis=0), axis=1, keepdims=True)
-    fill = 1 / np.tile(n_alleles, (1, reads.shape[-1]))
-    dist[gaps] = fill[gaps]
-
+    n_reads, n_pos = reads.shape
+    if n_pos == 0:
+        return np.empty((0, 1), dtype=np.float64)
+    max_allele = np.max(n_alleles)
+    dist = np.zeros((n_pos, max_allele), np.float64)
+    for r in range(n_reads):
+        for i in range(n_pos):
+            for a in range(n_alleles[i]):
+                if reads[r, i] == a:
+                    dist[i, a] += 1 - error_rate
+                elif reads[r, i] < 0:
+                    pass
+                else:
+                    dist[i, a] += error_rate / 3
     # normalize
-    dist /= dist.sum(axis=-1, keepdims=True)
-
+    for i in range(n_pos):
+        total = np.sum(dist[i])
+        if total == 0.0:
+            # handle gaps
+            n = n_alleles[i]
+            dist[i, 0:n] = 1.0 / n
+        else:
+            dist[i] /= total
     return dist
 
 
 def _homozygosity_probabilities(
-    reads, n_alleles, ploidy, inbreeding=0, read_counts=None
+    reads, n_alleles, ploidy, error_rate, inbreeding=0, read_counts=None
 ):
     """Calculate posterior probabilities at each single SNP position to determine
     if an individual is homozygous for a single allele.
 
     Parameters
     ----------
-    reads : ndarray, float, shape (n_reads, n_positions, max_allele)
-        Reads encoded as probability distributions.
+    reads : ndarray, int, shape (n_reads, n_base)
+        Observed reads with base positions encoded
+        as simple integers from 0 to n_nucl and -1
+        indicating gaps.
     n_alleles : array_like, int, shape(n_positions, )
         Number of possible alleles for each SNP.
     ploidy : int
         Ploidy of organism.
+    error_rate : float
+        Expected base calling error rate.
     inbreeding : float
         Expected inbreeding coefficient of organism.
     read_counts : ndarray, int, shape (n_reads, )
@@ -514,7 +543,12 @@ def _homozygosity_probabilities(
     The probabilities calculated this way are independent
     of alleles at other positions.
     """
-    _, n_pos, max_allele = reads.shape
+    _, n_pos = reads.shape
+
+    if n_pos == 0:
+        return np.empty((0, 2), dtype=np.float64)
+
+    max_allele = np.max(n_alleles)
     probabilites = np.zeros((n_pos, max_allele), dtype=float)
 
     for i in range(n_pos):
@@ -522,7 +556,13 @@ def _homozygosity_probabilities(
 
         # calculate posterior distribution
         genotypes, probs = snp_posterior(
-            reads, i, n, ploidy, inbreeding, read_counts=read_counts
+            reads,
+            i,
+            n,
+            ploidy=ploidy,
+            inbreeding=inbreeding,
+            error_rate=error_rate,
+            read_counts=read_counts,
         )
 
         # look at homozygous genotypes

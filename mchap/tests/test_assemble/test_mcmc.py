@@ -3,6 +3,7 @@ import pytest
 
 from mchap.assemble.likelihood import log_likelihood
 from mchap.assemble import mcmc
+from mchap.io.util import PFEIFFER_ERROR
 from mchap.jitutils import seed_numba
 from mchap.testing import simulate_reads
 from mchap.encoding import integer
@@ -25,21 +26,23 @@ def test_point_beta_probabilities():
 def test_read_mean_dist():
     reads = np.array(
         [
-            [[0.9, 0.1], [0.8, 0.2], [0.8, 0.2]],
-            [[0.9, 0.1], [0.8, 0.2], [0.8, 0.2]],
-            [[0.9, 0.1], [0.2, 0.8], [np.nan, np.nan]],
-            [[0.9, 0.1], [0.2, 0.8], [np.nan, np.nan]],
+            [0, 0, 0, -1],
+            [0, 0, 0, -1],
+            [0, 1, -1, -1],
+            [0, 1, -1, -1],
         ]
     )
     expect = np.array(
         [
-            [0.9, 0.1],
-            [0.5, 0.5],
-            [0.8, 0.2],
+            [0.7, 0.1, 0.1, 0.1],
+            [0.5, 0.5, 0.0, 0.0],
+            [0.875, 0.125, 0.0, 0.0],
+            [0.5, 0.5, 0.0, 0.0],
         ]
     )
-    actual = mcmc._read_mean_dist(reads)
-    np.testing.assert_array_equal(actual, expect)
+    n_alleles = np.array([4, 2, 2, 2])
+    actual = mcmc._read_mean_dist(reads, n_alleles=n_alleles, error_rate=0.3)
+    np.testing.assert_array_almost_equal(actual, expect)
 
 
 def test_homozygosity_probabilities():
@@ -61,7 +64,12 @@ def test_homozygosity_probabilities():
         uniform_sample=True,
         errors=False,
     )
-    actual = mcmc._homozygosity_probabilities(reads, n_alleles, ploidy) > 0.999
+    actual = (
+        mcmc._homozygosity_probabilities(
+            reads, n_alleles, ploidy, error_rate=PFEIFFER_ERROR
+        )
+        > 0.999
+    )
     expect = np.zeros((6, 2), dtype=bool)
     np.testing.assert_array_equal(actual, expect)
 
@@ -72,7 +80,12 @@ def test_homozygosity_probabilities():
         uniform_sample=True,
         errors=False,
     )
-    actual = mcmc._homozygosity_probabilities(reads, n_alleles, ploidy) > 0.999
+    actual = (
+        mcmc._homozygosity_probabilities(
+            reads, n_alleles, ploidy, error_rate=PFEIFFER_ERROR
+        )
+        > 0.999
+    )
     expect = np.array(
         [
             [True, False],
@@ -98,9 +111,9 @@ def test_DenovoMCMC__zero_reads():
     )
 
     # zero reads
-    reads = np.empty((0, n_base, 2), dtype=float)
+    reads = np.empty((0, n_base), dtype=np.int8)
 
-    trace = model.fit(reads).burn(n_burn)
+    trace = model.fit(reads, error_rate=PFEIFFER_ERROR).burn(n_burn)
     posterior = trace.posterior()
     assert trace.genotypes.shape == (n_chains, n_steps - n_burn, ploidy, n_base)
     assert posterior.probabilities[0] < 0.05
@@ -116,9 +129,9 @@ def test_DenovoMCMC__zero_snps():
         ploidy=ploidy, n_alleles=n_alleles, steps=n_steps, chains=n_chains
     )
 
-    reads = np.empty((10, n_base, 0), dtype=float)
+    reads = np.empty((10, n_base), dtype=np.int8)
 
-    trace = model.fit(reads).burn(n_burn)
+    trace = model.fit(reads, error_rate=PFEIFFER_ERROR).burn(n_burn)
     posterior = trace.posterior()
     assert trace.genotypes.shape == (n_chains, n_steps - n_burn, ploidy, 0)
     assert np.all(np.isnan(trace.llks))
@@ -135,16 +148,16 @@ def test_DenovoMCMC__zero_reads_or_snps():
         ploidy=ploidy, n_alleles=n_alleles, steps=n_steps, chains=n_chains
     )
 
-    reads = np.empty((0, n_base, 0), dtype=float)
+    reads = np.empty((0, n_base), dtype=np.int8)
 
-    trace = model.fit(reads).burn(n_burn)
+    trace = model.fit(reads, error_rate=PFEIFFER_ERROR).burn(n_burn)
     posterior = trace.posterior()
     assert trace.genotypes.shape == (n_chains, n_steps - n_burn, ploidy, 0)
     assert np.all(np.isnan(trace.llks))
     assert posterior.probabilities[0] == 1  # no variability
 
 
-def test_DenovoMCMC__all_nans():
+def test_DenovoMCMC__all_gaps():
     n_chains = 2
     ploidy, n_base = 4, 6
     n_steps = 1000
@@ -155,16 +168,16 @@ def test_DenovoMCMC__all_nans():
     )
 
     # high read depth
-    reads = np.empty((10, n_base, 2), dtype=float)
-    reads[:] = np.nan
+    reads = np.empty((10, n_base), dtype=np.int8)
+    reads[:] = -1
 
-    trace = model.fit(reads).burn(n_burn)
+    trace = model.fit(reads, error_rate=PFEIFFER_ERROR).burn(n_burn)
     posterior = trace.posterior()
     assert trace.genotypes.shape == (n_chains, n_steps - n_burn, ploidy, n_base)
     assert posterior.probabilities[0] < 0.05
 
 
-def test_DenovoMCMC__nans_ignored():
+def test_DenovoMCMC__gaps_ignored():
     # nan-reads should have no affect on mcmc
     haplotypes = np.array(
         [
@@ -188,20 +201,19 @@ def test_DenovoMCMC__nans_ignored():
         n_reads=16,
         uniform_sample=True,
         errors=False,
-        qual=(60, 60),
     )
 
-    nan_reads = np.empty((4, n_base, 2), dtype=reads1.dtype)
-    nan_reads[:] = np.nan
+    nan_reads = np.empty((4, n_base), dtype=reads1.dtype)
+    nan_reads[:] = -1
     reads2 = np.concatenate([reads1, nan_reads])
 
     np.random.seed(42)
     seed_numba(42)
-    trace1 = model.fit(reads1).burn(n_burn)
+    trace1 = model.fit(reads1, error_rate=PFEIFFER_ERROR).burn(n_burn)
 
     np.random.seed(42)
     seed_numba(42)
-    trace2 = model.fit(reads2).burn(n_burn)
+    trace2 = model.fit(reads2, error_rate=PFEIFFER_ERROR).burn(n_burn)
 
     np.testing.assert_array_equal(trace1.genotypes, trace2.genotypes)
 
@@ -228,10 +240,9 @@ def test_DenovoMCMC__non_variable():
         haplotypes,
         n_reads=40,
         errors=False,
-        qual=(60, 60),
     )
 
-    trace = model.fit(reads).burn(n_burn)
+    trace = model.fit(reads, error_rate=PFEIFFER_ERROR).burn(n_burn)
     posterior = trace.posterior()
 
     assert trace.genotypes.shape == (n_chains, n_steps - n_burn, ploidy, n_base)
@@ -266,11 +277,10 @@ def test_DenovoMCMC__diploid():
         n_reads=2,
         uniform_sample=True,
         errors=False,
-        qual=(60, 60),
     )
 
     for i in range(10):
-        trace = model.fit(reads).burn(n_burn)
+        trace = model.fit(reads, error_rate=PFEIFFER_ERROR).burn(n_burn)
         posterior = trace.posterior()
         assert trace.genotypes.shape == (n_chains, n_steps - n_burn, ploidy, n_base)
         assert posterior.probabilities[0] > 0.90
@@ -306,10 +316,9 @@ def test_DenovoMCMC__tetraploid():
         n_reads=40,
         uniform_sample=True,
         errors=False,
-        qual=(60, 60),
     )
     for _ in range(10):
-        trace = model.fit(reads).burn(n_burn)
+        trace = model.fit(reads, error_rate=PFEIFFER_ERROR).burn(n_burn)
         posterior = trace.posterior()
         assert trace.genotypes.shape == (n_chains, n_steps - n_burn, ploidy, n_base)
         assert posterior.probabilities[0] > 0.90
@@ -322,10 +331,9 @@ def test_DenovoMCMC__tetraploid():
         n_reads=16,
         uniform_sample=True,
         errors=False,
-        qual=(60, 60),
     )
     for _ in range(10):
-        trace = model.fit(reads).burn(n_burn)
+        trace = model.fit(reads, error_rate=PFEIFFER_ERROR).burn(n_burn)
         posterior = trace.posterior()
         assert trace.genotypes.shape == (n_chains, n_steps - n_burn, ploidy, n_base)
         assert 0.30 < posterior.probabilities[0] < 0.90
@@ -338,10 +346,9 @@ def test_DenovoMCMC__tetraploid():
         n_reads=8,
         uniform_sample=True,
         errors=False,
-        qual=(60, 60),
     )
     for _ in range(10):
-        trace = model.fit(reads).burn(n_burn)
+        trace = model.fit(reads, error_rate=PFEIFFER_ERROR).burn(n_burn)
         posterior = trace.posterior()
         assert trace.genotypes.shape == (n_chains, n_steps - n_burn, ploidy, n_base)
         assert posterior.probabilities[0] < 0.30
@@ -369,7 +376,6 @@ def test_DenovoMCMC__seed():
         n_reads=16,
         uniform_sample=True,
         errors=False,
-        qual=(60, 60),
     )
 
     model_1 = mcmc.DenovoMCMC(
@@ -382,9 +388,9 @@ def test_DenovoMCMC__seed():
         ploidy, n_alleles, steps=n_steps, chains=n_chains, random_seed=42
     )
 
-    trace_1 = model_1.fit(reads)
-    trace_2 = model_2.fit(reads)
-    trace_3 = model_3.fit(reads)
+    trace_1 = model_1.fit(reads, error_rate=PFEIFFER_ERROR)
+    trace_2 = model_2.fit(reads, error_rate=PFEIFFER_ERROR)
+    trace_3 = model_3.fit(reads, error_rate=PFEIFFER_ERROR)
 
     # compair among runs
     assert np.any((trace_1.genotypes != trace_2.genotypes))
@@ -413,7 +419,7 @@ def test_DenovoMCMC__fuzz():
             ploidy=ploidy, n_alleles=n_alleles, steps=n_steps, chains=n_chains
         )
         reads = simulate_reads(haplotypes, n_reads=n_reads)
-        trace = model.fit(reads)
+        trace = model.fit(reads, error_rate=PFEIFFER_ERROR)
         assert trace.genotypes.shape == (n_chains, n_steps, ploidy, n_base)
         assert trace.llks.shape == (n_chains, n_steps)
 
@@ -433,10 +439,10 @@ def test_DenovoMCMC__temperatures_bias(temperatures):
     """
     reads = np.array(
         [
-            [[0.9, 0.1], [0.1, 0.9]],
-            [[0.9, 0.1], [0.1, 0.9]],
-            [[0.9, 0.1], [0.9, 0.1]],
-            [[0.9, 0.1], [0.9, 0.1]],
+            [0, 1],
+            [0, 1],
+            [0, 0],
+            [0, 0],
         ]
     )
     genotypes = np.array(
@@ -456,7 +462,7 @@ def test_DenovoMCMC__temperatures_bias(temperatures):
     )
 
     # calculate exact posteriors
-    llks = np.array([log_likelihood(reads, g) for g in genotypes])
+    llks = np.array([log_likelihood(reads, g, error_rate=0.01) for g in genotypes])
     priors = np.array([1, 2, 2, 2, 1, 2, 2, 1, 2, 1])
     priors = priors / priors.sum()
     exact_posteriors = np.exp(llks + np.log(priors))
@@ -471,7 +477,7 @@ def test_DenovoMCMC__temperatures_bias(temperatures):
         random_seed=11,
         temperatures=temperatures,
     )
-    trace = model.fit(reads)
+    trace = model.fit(reads, error_rate=0.01)
     posterior = trace.burn(100).posterior()
     simulation_posteriors = {g.tobytes(): 0 for g in genotypes}
     simulation_posteriors.update(
@@ -524,12 +530,7 @@ def test_DenovoMCMC__temperatures_submode():
     strings, counts = zip(*read_counts)
     calls = integer.from_strings(strings)
     counts = np.array(list(counts))
-    dists = integer.as_probabilistic(
-        calls,
-        n_alleles=2,
-        p=0.999,
-    )
-    reads = mset.repeat(dists, counts)
+    reads = mset.repeat(calls, counts)
     n_alleles = [2] * 6
 
     alt_mode = np.array(
@@ -561,7 +562,9 @@ def test_DenovoMCMC__temperatures_submode():
     model = mcmc.DenovoMCMC(
         ploidy=6, n_alleles=n_alleles, steps=1100, temperatures=[1.0], random_seed=1
     )
-    posterior = model.fit(reads, initial=initial).burn(100).posterior()
+    posterior = (
+        model.fit(reads, error_rate=0.001, initial=initial).burn(100).posterior()
+    )
     np.testing.assert_array_equal(posterior.genotypes[0], alt_mode)  # sub-optimal mode
     assert posterior.probabilities[0] > 0.95
 
@@ -573,6 +576,8 @@ def test_DenovoMCMC__temperatures_submode():
         temperatures=[0.1, 1.0],
         random_seed=1,
     )
-    posterior = model.fit(reads, initial=initial).burn(100).posterior()
+    posterior = (
+        model.fit(reads, error_rate=0.001, initial=initial).burn(100).posterior()
+    )
     np.testing.assert_array_equal(posterior.genotypes[0], opt_mode)  # optimal mode
     assert posterior.probabilities[0] > 0.95

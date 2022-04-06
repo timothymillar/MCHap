@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from mchap.io.util import PFEIFFER_ERROR
 
 from mchap.testing import simulate_reads
 from mchap.calling.mcmc import gibbs_options, mh_options
@@ -47,6 +48,7 @@ def test_gibbs_mh_transition_equivalence(seed):
         haplotypes=haplotypes,
         reads=reads,
         read_counts=read_counts,
+        error_rate=PFEIFFER_ERROR,
         inbreeding=inbreeding,
         llks_array=gibbs_llks_array,
         lpriors_array=gibbs_lpriors_array,
@@ -69,6 +71,7 @@ def test_gibbs_mh_transition_equivalence(seed):
             haplotypes=haplotypes,
             reads=reads,
             read_counts=read_counts,
+            error_rate=PFEIFFER_ERROR,
             inbreeding=inbreeding,
             llks_array=mh_llks_array,
             lpriors_array=mh_lpriors_array,

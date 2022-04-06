@@ -254,27 +254,8 @@ base_error_rate = Parameter(
     dict(
         nargs=1,
         type=float,
-        default=[0.0],
-        help=(
-            "Expected base error rate of read sequences (default = 0.0). "
-            "This is used in addition to base phred-scores by default "
-            "however base phred-scores can be ignored using the "
-            "--ignore-base-phred-scores flag."
-        ),
-    ),
-)
-
-ignore_base_phred_scores = BooleanFlag(
-    "--ignore-base-phred-scores",
-    dict(
-        dest="ignore_base_phred_scores",
-        action="store_true",
-        help=(
-            "Flag: Ignore base phred-scores as a source of base error rate. "
-            "This can improve MCMC speed by allowing for greater de-duplication "
-            "of reads however an error rate > 0.0 must be specified with the "
-            "--base-error-rate argument."
-        ),
+        default=[0.0024],
+        help=("Expected base error rate of read sequences (default = 0.0024). "),
     ),
 )
 
@@ -581,7 +562,6 @@ DEFAULT_PARSER_ARGUMENTS = [
     inbreeding,
     sample_inbreeding,
     base_error_rate,
-    ignore_base_phred_scores,
     mapping_quality,
     skip_duplicates,
     skip_qcfail,
@@ -790,11 +770,8 @@ def parse_sample_temperatures(arguments, samples):
 
 def collect_default_program_arguments(arguments):
     # must have some source of error in reads
-    if arguments.ignore_base_phred_scores:
-        if arguments.base_error_rate[0] == 0.0:
-            raise ValueError(
-                "Cannot ignore base phred scores if --base-error-rate is 0"
-            )
+    if arguments.base_error_rate[0] == 0.0:
+        raise ValueError("Cannot set base error rate to 0")
     # merge sample specific data with defaults
     samples, sample_bams = parse_sample_bam_paths(arguments)
     sample_ploidy = parse_sample_value_map(
@@ -818,7 +795,6 @@ def collect_default_program_arguments(arguments):
         sample_inbreeding=sample_inbreeding,
         read_group_field=arguments.read_group_field[0],
         base_error_rate=arguments.base_error_rate[0],
-        ignore_base_phred_scores=arguments.ignore_base_phred_scores,
         mapping_quality=arguments.mapping_quality[0],
         skip_duplicates=arguments.skip_duplicates,
         skip_qcfail=arguments.skip_qcfail,

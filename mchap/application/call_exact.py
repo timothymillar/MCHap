@@ -73,8 +73,8 @@ class program(baseclass.program):
             try:
                 ploidy = data.sample_ploidy[sample]
                 inbreeding = data.sample_inbreeding[sample]
-                reads = data.sampledata["read_dists_unique"][sample]
-                read_counts = read_counts = data.sampledata["read_dist_counts"][sample]
+                reads = data.sampledata["read_calls_unique"][sample]
+                read_counts = read_counts = data.sampledata["read_calls_counts"][sample]
 
                 # call haplotypes
                 if ("GL" in data.formatfields) or ("GP" in data.formatfields):
@@ -84,6 +84,7 @@ class program(baseclass.program):
                         read_counts=read_counts,
                         haplotypes=haplotypes,
                         ploidy=ploidy,
+                        error_rate=self.base_error_rate,
                     )
                     probabilities = genotype_posteriors(
                         log_likelihoods=llks,
@@ -118,6 +119,7 @@ class program(baseclass.program):
                         ploidy=ploidy,
                         inbreeding=inbreeding,
                         return_phenotype_prob=True,
+                        error_rate=self.base_error_rate,
                     )
 
                 # store variables

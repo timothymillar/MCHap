@@ -16,6 +16,7 @@ def mh_options(
     haplotypes,
     reads,
     read_counts,
+    error_rate,
     inbreeding,
     llks_array,
     lpriors_array,
@@ -32,10 +33,12 @@ def mh_options(
         Index of allele that is variable in this step.
     haplotypes : ndarray, int, shape (n_haplotypes, n_pos)
         Integer encoded haplotypes.
-    reads : ndarray, float, shape (n_reads, n_pos, n_nucl)
-        Probabilistic reads.
+    reads : ndarray, float, shape (n_reads, n_pos)
+        Intiger reads.
     read_counts : ndarray, int, shape (n_reads, )
         Count of each read.
+    error_rate : float
+        Expected base calling error rate
     inbreeding : float
         Expected inbreeding coefficient of sample.
     llks_array : ndarray, float , shape (n_haplotypes, )
@@ -72,6 +75,7 @@ def mh_options(
     llk = log_likelihood_alleles_cached(
         reads=reads,
         read_counts=read_counts,
+        error_rate=error_rate,
         haplotypes=haplotypes,
         genotype_alleles=genotype_alleles,
         cache=llk_cache,
@@ -108,6 +112,7 @@ def mh_options(
             llks_array[a] = log_likelihood_alleles_cached(
                 reads=reads,
                 read_counts=read_counts,
+                error_rate=error_rate,
                 haplotypes=haplotypes,
                 genotype_alleles=genotype_alleles,
                 cache=llk_cache,
@@ -140,6 +145,7 @@ def gibbs_options(
     haplotypes,
     reads,
     read_counts,
+    error_rate,
     inbreeding,
     llks_array,
     lpriors_array,
@@ -156,10 +162,12 @@ def gibbs_options(
         Index of allele that is variable in this step.
     haplotypes : ndarray, int, shape (n_haplotypes, n_pos)
         Integer encoded haplotypes.
-    reads : ndarray, float, shape (n_reads, n_pos, n_nucl)
-        Probabilistic reads.
+    reads : ndarray, float, shape (n_reads, n_pos)
+        Integer reads.
     read_counts : ndarray, int, shape (n_reads, )
         Count of each read.
+    error_rate : float
+        Expected base calling error rate
     inbreeding : float
         Expected inbreeding coefficient of sample.
     llks_array : ndarray, float , shape (n_haplotypes, )
@@ -203,6 +211,7 @@ def gibbs_options(
         llks_array[a] = log_likelihood_alleles_cached(
             reads=reads,
             read_counts=read_counts,
+            error_rate=error_rate,
             haplotypes=haplotypes,
             genotype_alleles=genotype_alleles,
             cache=llk_cache,
@@ -222,6 +231,7 @@ def compound_step(
     haplotypes,
     reads,
     read_counts,
+    error_rate,
     inbreeding,
     llk_cache=None,
     step_type=0,
@@ -234,10 +244,12 @@ def compound_step(
         Index of each haplotype in the genotype.
     haplotypes : ndarray, int, shape (n_haplotypes, n_pos)
         Integer encoded haplotypes.
-    reads : ndarray, float, shape (n_reads, n_pos, n_nucl)
-        Probabilistic reads.
+    reads : ndarray, float, shape (n_reads, n_pos)
+        Integer reads.
     read_counts : ndarray, int, shape (n_reads, )
         Count of each read.
+    error_rate : float
+        Expected base calling error rate
     inbreeding : float
         Expected inbreeding coefficient of sample.
     llk_cache : dict
@@ -281,6 +293,7 @@ def compound_step(
                 haplotypes=haplotypes,
                 reads=reads,
                 read_counts=read_counts,
+                error_rate=error_rate,
                 inbreeding=inbreeding,
                 llks_array=llks,
                 lpriors_array=lpriors,
@@ -294,6 +307,7 @@ def compound_step(
                 haplotypes=haplotypes,
                 reads=reads,
                 read_counts=read_counts,
+                error_rate=error_rate,
                 inbreeding=inbreeding,
                 llks_array=llks,
                 lpriors_array=lpriors,
@@ -320,6 +334,7 @@ def mcmc_sampler(
     haplotypes,
     reads,
     read_counts,
+    error_rate,
     inbreeding,
     n_steps=1000,
     cache=False,
@@ -333,10 +348,12 @@ def mcmc_sampler(
         Index of each haplotype in the genotype.
     haplotypes : ndarray, int, shape (n_haplotypes, n_pos)
         Integer encoded haplotypes.
-    reads : ndarray, float, shape (n_reads, n_pos, n_nucl)
-        Probabilistic reads.
+    reads : ndarray, float, shape (n_reads, n_pos)
+        Integer reads.
     read_counts : ndarray, int, shape (n_reads, )
         Count of each read.
+    error_rate : float
+        Expected base calling error rate
     inbreeding : float
         Expected inbreeding coefficient of sample.
     n_steps : int
@@ -368,6 +385,7 @@ def mcmc_sampler(
             haplotypes=haplotypes,
             reads=reads,
             read_counts=read_counts,
+            error_rate=error_rate,
             inbreeding=inbreeding,
             llk_cache=llk_cache,
             step_type=step_type,
@@ -378,7 +396,7 @@ def mcmc_sampler(
 
 
 @njit(cache=True)
-def greedy_caller(haplotypes, ploidy, reads, read_counts, inbreeding=0.0):
+def greedy_caller(haplotypes, ploidy, reads, read_counts, error_rate, inbreeding=0.0):
     """Greedy method for calling genotype from known haplotypes.
 
     Parameters
@@ -387,10 +405,12 @@ def greedy_caller(haplotypes, ploidy, reads, read_counts, inbreeding=0.0):
         Integer encoded haplotypes.
     ploidy : int
         Ploidy of organism locus.
-    reads : ndarray, float, shape (n_reads, n_pos, n_nucl)
-        Probabilistic reads.
+    reads : ndarray, float, shape (n_reads, n_pos)
+        Integer reads.
     read_counts : ndarray, int, shape (n_reads, )
         Count of each read.
+    error_rate : float
+        Expected base calling error rate
     inbreeding : float
         Expected inbreeding coefficient of sample.
 
@@ -416,6 +436,7 @@ def greedy_caller(haplotypes, ploidy, reads, read_counts, inbreeding=0.0):
             llk = log_likelihood_alleles(
                 reads=reads,
                 read_counts=read_counts,
+                error_rate=error_rate,
                 haplotypes=haplotypes,
                 genotype_alleles=genotype,
             )

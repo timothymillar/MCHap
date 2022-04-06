@@ -11,7 +11,6 @@ from mchap.io import (
     Locus,
     extract_read_variants,
     encode_read_alleles,
-    encode_read_distributions,
     vcf,
 )
 from mchap.io.vcf.infofields import HEADER_INFO_FIELDS
@@ -160,7 +159,7 @@ class program(object):
         Returns
         -------
         data : LocusAssemblyData
-            With sampledata fields: "read_calls", "read_dists_unique", "read_dist_counts",
+            With sampledata fields: "read_calls", "read_calls_unique", "read_calls_counts",
             "DP", "RCOUNT", "RCALLS".
         """
         for field in [
@@ -168,8 +167,8 @@ class program(object):
             "RCOUNT",
             "RCALLS",
             "read_calls",
-            "read_dists_unique",
-            "read_dist_counts",
+            "read_calls_unique",
+            "read_calls_counts",
         ]:
             data.sampledata[field] = dict()
         locus = data.locus
@@ -207,20 +206,12 @@ class program(object):
                 # encode reads as alleles and probabilities
                 read_calls = encode_read_alleles(locus, read_chars)
                 data.sampledata["read_calls"][sample] = read_calls
-                if self.ignore_base_phred_scores:
-                    read_quals = None
-                read_dists = encode_read_distributions(
-                    locus,
-                    read_calls,
-                    read_quals,
-                    error_rate=self.base_error_rate,
-                )
                 data.sampledata["RCALLS"][sample] = np.sum(read_calls >= 0)
 
                 # de-duplicate reads
-                read_dists_unique, read_dist_counts = mset.unique_counts(read_dists)
-                data.sampledata["read_dists_unique"][sample] = read_dists_unique
-                data.sampledata["read_dist_counts"][sample] = read_dist_counts
+                read_calls_unique, read_calls_counts = mset.unique_counts(read_calls)
+                data.sampledata["read_calls_unique"][sample] = read_calls_unique
+                data.sampledata["read_calls_counts"][sample] = read_calls_counts
 
             # end of try clause for specific sample
             except Exception as e:

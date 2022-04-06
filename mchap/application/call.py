@@ -72,8 +72,8 @@ class program(baseclass.program):
         for sample in data.samples:
             # wrap in try clause to pass sample info back with any exception
             try:
-                reads = data.sampledata["read_dists_unique"][sample]
-                read_counts = read_counts = data.sampledata["read_dist_counts"][sample]
+                reads = data.sampledata["read_calls_unique"][sample]
+                read_counts = read_counts = data.sampledata["read_calls_counts"][sample]
                 # call haplotypes
                 trace = (
                     CallingMCMC(
@@ -87,6 +87,7 @@ class program(baseclass.program):
                     .fit(
                         reads=reads,
                         read_counts=read_counts,
+                        error_rate=self.base_error_rate,
                     )
                     .burn(self.mcmc_burn)
                 )
@@ -121,6 +122,7 @@ class program(baseclass.program):
                         read_counts=read_counts,
                         ploidy=data.sample_ploidy[sample],
                         haplotypes=haplotypes,
+                        error_rate=self.base_error_rate,
                     )
                     data.sampledata["GL"][sample] = np.round(
                         natural_log_to_log10(llks), self.precision

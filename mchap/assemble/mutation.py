@@ -15,6 +15,7 @@ __all__ = ["base_step", "compound_step"]
 def base_step(
     genotype,
     reads,
+    error_rate,
     llk,
     h,
     j,
@@ -33,9 +34,12 @@ def base_step(
     genotype : ndarray, int, shape (ploidy, n_base)
         Initial state of haplotypes with base positions encoded
         as simple integers from 0 to n_nucl.
-    reads : ndarray, float, shape (n_reads, n_base, n_nucl)
-        Observed reads encoded as an array of probabilistic
-        matrices.
+    reads : ndarray, int, shape (n_reads, n_base)
+        Observed reads with base positions encoded
+        as simple integers from 0 to n_nucl and -1
+        indicating gaps.
+    error_rate : float
+        Expected base calling error rate.
     llk : float
         Log-likelihood of the initial haplotype state given
         the observed reads.
@@ -108,7 +112,11 @@ def base_step(
 
             # calculate and store log-likelihood: P(G'|R)
             llk_i, cache = log_likelihood_cached(
-                reads, genotype, cache=cache, read_counts=read_counts
+                reads,
+                genotype,
+                error_rate=error_rate,
+                cache=cache,
+                read_counts=read_counts,
             )
             llks[i] = llk_i
 
@@ -151,6 +159,7 @@ def base_step(
 def compound_step(
     genotype,
     reads,
+    error_rate,
     llk,
     inbreeding=0,
     n_alleles=None,
@@ -166,8 +175,12 @@ def compound_step(
     genotype : ndarray, int, shape (ploidy, n_base)
         Initial state of haplotypes with base positions encoded as
         simple integers from 0 to n_nucl.
-    reads : ndarray, float, shape (n_reads, n_base, n_nucl)
-        Observed reads encoded as an array of probabilistic matrices.
+    reads : ndarray, int, shape (n_reads, n_base)
+        Observed reads with base positions encoded
+        as simple integers from 0 to n_nucl and -1
+        indicating gaps.
+    error_rate : float
+        Expected base calling error rate.
     llk : float
         Log-likelihood of the initial haplotype state given the
         observed reads.
@@ -223,6 +236,7 @@ def compound_step(
         llk, cache = base_step(
             genotype=genotype,
             reads=reads,
+            error_rate=error_rate,
             llk=llk,
             h=h,
             j=j,

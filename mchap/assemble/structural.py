@@ -392,7 +392,7 @@ def _interval_inverse_mask(interval, n):
 
 @numba.njit(cache=True)
 def haplotype_segment_labels(genotype, interval=None):
-    """Create a labels matrix in whihe the first coloumn contains
+    """Create a labels matrix in while the first column contains
     labels for haplotype segments within the specified range and
     the second column contains labels for the remander of the
     haplotypes.
@@ -404,8 +404,8 @@ def haplotype_segment_labels(genotype, interval=None):
         simple integers from 0 to n_allele.
     interval : tuple, int, optional
         If set then the first label of each haplotype will
-        corospond to the positions within the interval and
-        the second label will corospond to the positions
+        correspond to the positions within the interval and
+        the second label will correspond to the positions
         outside of the interval (defaults = None).
 
     Returns
@@ -416,7 +416,7 @@ def haplotype_segment_labels(genotype, interval=None):
 
     Notes
     -----
-    If no interval is speciefied then the first column will contain
+    If no interval is specified then the first column will contain
     labels for the full haplotypes and the second column will
     contain zeros.
 
@@ -434,6 +434,7 @@ def haplotype_segment_labels(genotype, interval=None):
 def interval_step(
     genotype,
     reads,
+    error_rate,
     llk,
     unique_haplotypes,
     inbreeding=0,
@@ -453,8 +454,12 @@ def interval_step(
         The current genotype state in an MCMC simulation consisting
         of a set of haplotypes with base positions encoded as
         integers from 0 to n_allele.
-    reads : ndarray, float, shape (n_reads, n_positions, max_allele)
-        Probabilistically encoded variable positions of NGS reads.
+    reads : ndarray, int, shape (n_reads, n_base)
+        Observed reads with base positions encoded
+        as simple integers from 0 to n_nucl and -1
+        indicating gaps.
+    error_rate : float
+        Expected base calling error rate.
     llk : float
         The log-likelihood of the current genotype state in the MCMC
         simulation.
@@ -524,6 +529,7 @@ def interval_step(
             reads=reads,
             genotype=genotype,
             cache=cache,
+            error_rate=error_rate,
             haplotype_indices=option_labels[i, :, 0],
             interval=interval,
             read_counts=read_counts,
@@ -576,6 +582,7 @@ def interval_step(
 def compound_step(
     genotype,
     reads,
+    error_rate,
     llk,
     intervals,
     n_alleles=None,
@@ -596,8 +603,12 @@ def compound_step(
         The current genotype state in an MCMC simulation consisting
         of a set of haplotypes with base positions encoded as
         integers from 0 to n_allele.
-    reads : ndarray, float, shape (n_reads, n_positions, max_allele)
-        Probabilistically encoded variable positions of NGS reads.
+    reads : ndarray, int, shape (n_reads, n_base)
+        Observed reads with base positions encoded
+        as simple integers from 0 to n_nucl and -1
+        indicating gaps.
+    error_rate : float
+        Expected base calling error rate.
     llk : float
         The log-likelihood of the current genotype state in the MCMC
         simulation.
@@ -638,8 +649,9 @@ def compound_step(
 
     n_intervals = len(intervals)
 
-    if n_alleles is None:
-        _, n_base, max_allele = reads.shape
+    if n_alleles is None:  # TODO: make n_alleles compulsory
+        _, n_base = reads.shape
+        max_allele = reads.max() + 1
         unique_haplotypes = max_allele**n_base
     else:
         unique_haplotypes = np.prod(n_alleles)
@@ -652,6 +664,7 @@ def compound_step(
         llk, cache = interval_step(
             genotype=genotype,
             reads=reads,
+            error_rate=error_rate,
             llk=llk,
             cache=cache,
             unique_haplotypes=unique_haplotypes,

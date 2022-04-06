@@ -2,6 +2,7 @@ import numpy as np
 
 from mchap.calling import exact
 from mchap import mset
+from mchap.io.util import PFEIFFER_ERROR
 from mchap.testing import simulate_reads
 from mchap.assemble.likelihood import log_likelihood
 from mchap.assemble.prior import log_genotype_prior
@@ -65,21 +66,23 @@ def test_genotype_likelihoods():
         n_reads=16,
         uniform_sample=True,
         errors=False,
-        qual=(60, 60),
     )
     reads_error = simulate_reads(
         error_haps,
         n_reads=1,
         uniform_sample=True,
         errors=False,
-        qual=(60, 60),
     )
-    _, n_pos, n_nucl = reads_correct.shape
-    reads = np.concatenate([reads_correct, reads_error]).reshape(-1, n_pos, n_nucl)
+    _, n_pos = reads_correct.shape
+    reads = np.concatenate([reads_correct, reads_error]).reshape(-1, n_pos)
     expect = np.empty(len(genotypes), dtype=np.float32)
     for i in range(len(expect)):
-        expect[i] = log_likelihood(reads, haplotypes[genotypes[i]])
-    actual = exact.genotype_likelihoods(reads, ploidy, haplotypes)
+        expect[i] = log_likelihood(
+            reads, haplotypes[genotypes[i]], error_rate=PFEIFFER_ERROR
+        )
+    actual = exact.genotype_likelihoods(
+        reads, ploidy, haplotypes, error_rate=PFEIFFER_ERROR
+    )
     np.testing.assert_almost_equal(expect, actual)
 
 
@@ -139,9 +142,10 @@ def test_genotype_posteriors():
         n_reads=16,
         uniform_sample=True,
         errors=False,
-        qual=(60, 60),
     )
-    log_likelihoods = exact.genotype_likelihoods(reads, ploidy, haplotypes)
+    log_likelihoods = exact.genotype_likelihoods(
+        reads, ploidy, haplotypes, error_rate=PFEIFFER_ERROR
+    )
     inbreeding = 0.3
     n_alleles = len(haplotypes)
     expect = np.empty(len(genotypes), dtype=np.float32)
@@ -235,15 +239,15 @@ def test_call_posterior_mode():
 
     reads = simulate_reads(
         haplotypes[genotype],
-        qual=(10, 10),
         uniform_sample=True,
         errors=False,
         n_reads=8,
-        error_rate=0,
     )
     reads, counts = mset.unique_counts(reads)
 
-    llks = exact.genotype_likelihoods(reads, ploidy, haplotypes, read_counts=counts)
+    llks = exact.genotype_likelihoods(
+        reads, ploidy, haplotypes, read_counts=counts, error_rate=PFEIFFER_ERROR
+    )
     probs = exact.genotype_posteriors(
         llks, ploidy, len(haplotypes), inbreeding=inbreeding
     )
@@ -255,7 +259,12 @@ def test_call_posterior_mode():
         mode_genotype_prob,
         mode_phenotype_prob,
     ) = exact.call_posterior_mode(
-        reads, 4, haplotypes, read_counts=counts, inbreeding=inbreeding
+        reads,
+        4,
+        haplotypes,
+        read_counts=counts,
+        inbreeding=inbreeding,
+        error_rate=PFEIFFER_ERROR,
     )
 
     np.testing.assert_array_equal(genotype, mode_genotype)

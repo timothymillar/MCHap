@@ -17,7 +17,7 @@ from mchap.jitutils import (
 
 @njit(cache=True)
 def _call_posterior_mode(
-    reads, ploidy, haplotypes, n_genotypes, read_counts=None, inbreeding=0
+    reads, ploidy, haplotypes, n_genotypes, error_rate, read_counts=None, inbreeding=0
 ):
     """Call posterior mode genotype from a set of known haplotypes."""
     n_alleles = len(haplotypes)
@@ -35,6 +35,7 @@ def _call_posterior_mode(
             reads=reads,
             genotype=haplotypes[genotype],
             read_counts=read_counts,
+            error_rate=error_rate,
         )
         # log prior
         get_haplotype_dosage(dosage, genotype.reshape(ploidy, 1))
@@ -54,7 +55,9 @@ def _call_posterior_mode(
     return mode_genotype, mode_llk, mode_ljoint, total_ljoint
 
 
-def _phenotype_log_joint(genotype, reads, haplotypes, read_counts=None, inbreeding=0):
+def _phenotype_log_joint(
+    genotype, reads, haplotypes, error_rate, read_counts=None, inbreeding=0
+):
     """Calculate phenotype posterior probability from a genotype and a set of known haplotypes."""
     ploidy = len(genotype)
     # unique alleles
@@ -78,6 +81,7 @@ def _phenotype_log_joint(genotype, reads, haplotypes, read_counts=None, inbreedi
             reads=reads,
             genotype=haplotypes[array],
             read_counts=read_counts,
+            error_rate=error_rate,
         )
         # log prior
         get_haplotype_dosage(dosage, array.reshape(ploidy, 1))
@@ -94,6 +98,7 @@ def call_posterior_mode(
     reads,
     ploidy,
     haplotypes,
+    error_rate,
     read_counts=None,
     inbreeding=0,
     return_phenotype_prob=True,
@@ -102,12 +107,14 @@ def call_posterior_mode(
 
     Parameters
     ----------
-    reads : ndarray, float, shape (n_reads, n_pos, n_nucl)
-        A set of probabalistically encoded reads.
+    reads : ndarray, float, shape (n_reads, n_pos)
+        A set of integer encoded reads.
     ploidy : int
         Ploidy of organism.
     haplotypes : ndarray, int, shape (n_haplotypes, n_pos)
         Integer encoded haplotypes in VCF allele order.
+    error_rate : float
+        Expected error rate of read base calls.
     read_counts : ndarray, int, shape (n_reads, )
         Counts of each (unique) read.
     inbreeding : float
@@ -139,6 +146,7 @@ def call_posterior_mode(
         n_genotypes=n_genotypes,
         read_counts=read_counts,
         inbreeding=inbreeding,
+        error_rate=error_rate,
     )
     mode_genotype_prob = np.exp(mode_ljoint - total_ljoint)
 
@@ -151,37 +159,43 @@ def call_posterior_mode(
         haplotypes=haplotypes,
         read_counts=read_counts,
         inbreeding=inbreeding,
+        error_rate=error_rate,
     )
     mode_phenotype_prob = np.exp(phenotype_ljoint - total_ljoint)
     return mode_genotype, mode_llk, mode_genotype_prob, mode_phenotype_prob
 
 
 @njit(cache=True)
-def _genotype_likelihoods(reads, ploidy, haplotypes, n_genotypes, read_counts=None):
+def _genotype_likelihoods(
+    reads, ploidy, haplotypes, n_genotypes, error_rate, read_counts=None
+):
     likelihoods = np.full(n_genotypes, np.nan, np.float32)
     genotype = np.zeros(ploidy, np.int64)
     for i in range(0, n_genotypes):
         likelihoods[i] = log_likelihood(
             reads=reads,
             genotype=haplotypes[genotype],
+            error_rate=error_rate,
             read_counts=read_counts,
         )
         increment_genotype(genotype)
     return likelihoods
 
 
-def genotype_likelihoods(reads, ploidy, haplotypes, read_counts=None):
+def genotype_likelihoods(reads, ploidy, haplotypes, error_rate, read_counts=None):
     """Calculate the log likelihood of every possible genotype
     for a given set of reads, ploidy, and possible haplotypes.
 
     Parameters
     ----------
-    reads : ndarray, float, shape (n_reads, n_pos, n_nucl)
-        A set of probabalistically encoded reads.
+    reads : ndarray, float, shape (n_reads, n_pos)
+        A set of integer encoded reads.
     ploidy : int
         Ploidy of organism.
     haplotypes : ndarray, int, shape (n_haplotypes, n_pos)
         Integer encoded haplotypes in VCF allele order.
+    error_rate : float
+        Expected error rate of read base calls.
 
     Returns
     -------
@@ -195,6 +209,7 @@ def genotype_likelihoods(reads, ploidy, haplotypes, read_counts=None):
         ploidy=ploidy,
         haplotypes=haplotypes,
         n_genotypes=n_genotypes,
+        error_rate=error_rate,
         read_counts=read_counts,
     )
 

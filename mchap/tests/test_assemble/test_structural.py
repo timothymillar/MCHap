@@ -395,8 +395,6 @@ def test_interval_step__recombination(use_cache, use_read_counts, inbreeding):
         n_reads=4,
         uniform_sample=True,
         errors=False,
-        error_rate=0.2,
-        qual=(60, 60),
     )
 
     # interval includes first 2 bases
@@ -433,7 +431,7 @@ def test_interval_step__recombination(use_cache, use_read_counts, inbreeding):
     dosage = np.empty(ploidy, int)
     for i, g in enumerate(genotypes):
         get_haplotype_dosage(dosage, g)
-        llk = log_likelihood(reads, g)
+        llk = log_likelihood(reads, g, error_rate=0.01)
         lprior = log_genotype_prior(dosage, unique_haplotypes, inbreeding=inbreeding)
         log_expect[i] = llk + lprior
     expect = normalise_log_probs(log_expect)
@@ -458,7 +456,7 @@ def test_interval_step__recombination(use_cache, use_read_counts, inbreeding):
             [1, 1, 1, 1],
         ]
     )
-    llk = log_likelihood(reads, genotype)
+    llk = log_likelihood(reads, genotype, error_rate=0.01)
     # count choices of each option
     counts = {}
     for g in genotypes:
@@ -469,7 +467,8 @@ def test_interval_step__recombination(use_cache, use_read_counts, inbreeding):
         llk, cache = structural.interval_step(
             genotype,
             reads,
-            llk,
+            error_rate=0.01,
+            llk=llk,
             unique_haplotypes=unique_haplotypes,
             interval=interval,
             step_type=0,
@@ -541,8 +540,6 @@ def test_interval_step__dosage_swap(use_cache, use_read_counts, inbreeding):
         n_reads=4,
         uniform_sample=True,
         errors=False,
-        error_rate=0.2,
-        qual=(60, 60),
     )
 
     # interval includes first 2 bases
@@ -579,7 +576,7 @@ def test_interval_step__dosage_swap(use_cache, use_read_counts, inbreeding):
     dosage = np.empty(ploidy, int)
     for i, g in enumerate(genotypes):
         get_haplotype_dosage(dosage, g)
-        llks[i] = log_likelihood(reads, g)
+        llks[i] = log_likelihood(reads, g, error_rate=0.01)
         lpriors[i] = log_genotype_prior(
             dosage, unique_haplotypes, inbreeding=inbreeding
         )
@@ -623,7 +620,7 @@ def test_interval_step__dosage_swap(use_cache, use_read_counts, inbreeding):
             [1, 1, 1, 1],
         ]
     )
-    llk = log_likelihood(reads, genotype)
+    llk = log_likelihood(reads, genotype, error_rate=0.01)
 
     # mcmc simulation
     counts = {}
@@ -633,7 +630,8 @@ def test_interval_step__dosage_swap(use_cache, use_read_counts, inbreeding):
         llk, cache = structural.interval_step(
             genotype,
             reads,
-            llk,
+            error_rate=0.01,
+            llk=llk,
             unique_haplotypes=unique_haplotypes,
             interval=interval,
             step_type=1,

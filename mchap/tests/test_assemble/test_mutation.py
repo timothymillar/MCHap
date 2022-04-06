@@ -7,6 +7,7 @@ from mchap.assemble.likelihood import (
     new_log_likelihood_cache,
 )
 from mchap.assemble.prior import log_genotype_prior
+from mchap.io.util import PFEIFFER_ERROR
 from mchap.jitutils import (
     normalise_log_probs,
     index_as_genotype_alleles,
@@ -63,10 +64,10 @@ def test_base_step(use_cache, use_read_counts, inbreeding):
     # haps 0,1,0 and 0,0,0
     reads = np.array(
         [
-            [[0.9, 0.1, 0.0], [0.1, 0.9, 0.0], [0.8, 0.1, 0.1]],
-            [[0.9, 0.1, 0.0], [0.1, 0.9, 0.0], [0.8, 0.1, 0.1]],
-            [[0.9, 0.1, 0.0], [0.9, 0.1, 0.0], [0.8, 0.1, 0.1]],
-            [[0.9, 0.1, 0.0], [0.9, 0.1, 0.0], [0.8, 0.1, 0.1]],
+            [0, 1, 0],
+            [0, 1, 0],
+            [0, 0, 0],
+            [0, 0, 0],
         ]
     )
     u_haps = int(2 * 2 * 3)
@@ -74,8 +75,8 @@ def test_base_step(use_cache, use_read_counts, inbreeding):
     # conditional probs of possible genotypes
     llks = np.array(
         [
-            log_likelihood(reads, genotype_1),
-            log_likelihood(reads, genotype_2),
+            log_likelihood(reads, genotype_1, error_rate=PFEIFFER_ERROR),
+            log_likelihood(reads, genotype_2, error_rate=PFEIFFER_ERROR),
         ]
     )
     lpriors = np.array(
@@ -102,11 +103,11 @@ def test_base_step(use_cache, use_read_counts, inbreeding):
         ],
         dtype=np.int8,
     )
-    llk = log_likelihood(reads, genotype)
+    llk = log_likelihood(reads, genotype, error_rate=PFEIFFER_ERROR)
 
     if use_cache:
         ploidy, n_base = genotype.shape
-        _, _, max_alleles = reads.shape
+        max_alleles = reads.max() + 1
         cache = new_log_likelihood_cache(ploidy, n_base, max_alleles)
     else:
         cache = None
@@ -128,6 +129,7 @@ def test_base_step(use_cache, use_read_counts, inbreeding):
         llk, cache = mutation.base_step(
             genotype,
             reads,
+            error_rate=PFEIFFER_ERROR,
             llk=llk,
             h=h,
             j=j,
@@ -189,16 +191,16 @@ def test_genotype_compound_step(use_cache, use_read_counts, inbreeding):
     # reads from haps 0,1,0 and 0,0,0
     reads = np.array(
         [
-            [[0.9, 0.1], [0.1, 0.9], [0.9, 0.1]],
-            [[0.9, 0.1], [0.1, 0.9], [0.9, 0.1]],
-            [[0.9, 0.1], [0.9, 0.1], [0.9, 0.1]],
-            [[0.9, 0.1], [0.9, 0.1], [0.9, 0.1]],
+            [0, 1, 0],
+            [0, 1, 0],
+            [0, 0, 0],
+            [0, 0, 0],
         ]
     )
-
-    _, n_base, n_nucl = reads.shape
+    n_alleles = np.array([2, 2, 2], np.int8)
+    _, n_base = reads.shape
     ploidy = 2
-    n_alleles = np.array([n_nucl] * n_base, np.int8)
+
     u_haps = combinatorics.count_unique_haplotypes(n_alleles)
     assert u_haps == len(haplotypes)
     u_gens = combinatorics.count_unique_genotypes(u_haps, ploidy)
@@ -213,14 +215,14 @@ def test_genotype_compound_step(use_cache, use_read_counts, inbreeding):
     dosage = np.empty(ploidy, int)
     for i, g in enumerate(genotypes):
         get_haplotype_dosage(dosage, g)
-        llk = log_likelihood(reads, g)
+        llk = log_likelihood(reads, g, error_rate=PFEIFFER_ERROR)
         lprior = log_genotype_prior(dosage, u_haps, inbreeding=inbreeding)
         log_expect[i] = llk + lprior
     expect = normalise_log_probs(log_expect)
 
     # additional parameters
     if use_cache:
-        cache = new_log_likelihood_cache(ploidy, n_base, n_nucl)
+        cache = new_log_likelihood_cache(ploidy, n_base, n_alleles.max())
     else:
         cache = None
     if use_read_counts:
@@ -231,7 +233,7 @@ def test_genotype_compound_step(use_cache, use_read_counts, inbreeding):
 
     # mcmc simulation
     genotype = genotypes[0].copy()
-    llk = log_likelihood(reads, genotype)
+    llk = log_likelihood(reads, genotype, error_rate=PFEIFFER_ERROR)
 
     # count occurrence of each genotype in MCMC
     counts = {g.tobytes(): 0 for g in genotypes}
@@ -239,7 +241,8 @@ def test_genotype_compound_step(use_cache, use_read_counts, inbreeding):
         llk, cache = mutation.compound_step(
             genotype,
             reads,
-            llk,
+            error_rate=PFEIFFER_ERROR,
+            llk=llk,
             n_alleles=n_alleles,
             inbreeding=inbreeding,
             read_counts=read_counts,
@@ -259,14 +262,13 @@ def test_genotype_compound_step__mask_ragged():
     # haps 0,1,0 and 0,0,0
     reads = np.array(
         [
-            [[0.9, 0.1, 0.0], [0.1, 0.9, 0.0], [0.8, 0.1, 0.1]],
-            [[0.9, 0.1, 0.0], [0.1, 0.9, 0.0], [0.8, 0.1, 0.1]],
-            [[0.9, 0.1, 0.0], [0.9, 0.1, 0.0], [0.8, 0.1, 0.1]],
-            [[0.9, 0.1, 0.0], [0.9, 0.1, 0.0], [0.8, 0.1, 0.1]],
+            [0, 1, 0],
+            [0, 1, 0],
+            [0, 0, 0],
+            [0, 0, 0],
         ]
     )
-    mask = np.all(reads == 0.0, axis=0)
-    n_alleles = np.sum(~mask, axis=-1).astype(np.int8)
+    n_alleles = np.array([2, 2, 3], np.int8)
 
     # intial genotype
     genotype = np.array(
@@ -276,7 +278,7 @@ def test_genotype_compound_step__mask_ragged():
         ],
         dtype=np.int8,
     )
-    llk = log_likelihood(reads, genotype)
+    llk = log_likelihood(reads, genotype, error_rate=0.1)
 
     n_steps = 10_000
     ploidy, n_base = genotype.shape
@@ -285,14 +287,18 @@ def test_genotype_compound_step__mask_ragged():
     seed_numba(42)
     for i in range(n_steps):
         llk, _ = mutation.compound_step(
-            genotype, reads, llk, n_alleles=n_alleles, cache=None
+            genotype,
+            reads,
+            error_rate=0.1,
+            llk=llk,
+            n_alleles=n_alleles,
         )
         trace[i] = genotype.copy()
 
     # count snp allele 1 occurrence in each base position
     allele_1_counts = (trace == 1).sum(axis=0).sum(axis=0)
     assert np.all(allele_1_counts < np.array([2000, 15000, 2000]))
-    assert np.all(allele_1_counts > np.array([500, 5000, 500]))
+    assert np.all(allele_1_counts > np.array([100, 5000, 100]))
 
     # check snp allele 2 occurers only in base position 3
     allele_2_counts = (trace == 2).sum(axis=0).sum(axis=0)

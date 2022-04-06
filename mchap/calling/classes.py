@@ -46,16 +46,18 @@ class CallingMCMC(Assembler):
 
     """
 
-    def fit(self, reads, read_counts=None, initial=None):
+    def fit(self, reads, error_rate, read_counts=None, initial=None):
         """Fit the parametized model to a set of probabilistically
         encoded variable positions of NGS reads.
 
         Parameters
         ----------
-        reads : ndarray, float, shape (n_reads, n_positions, max_allele)
-            Probabilistically encoded variable positions of NGS reads.
+        reads : ndarray, float, shape (n_reads, n_pos)
+            Integer reads.
+        error_rate : float
+            Expected base calling error rate
         read_counts : ndarray, int, shape (n_reads, )
-            Optionally specify the number of observations of each read.
+            Count of each read.
         initial : ndarray, int, shape (ploidy, ), optional
             Set the initial genotype state of each MCMC simulation
             (default = None).
@@ -93,6 +95,7 @@ class CallingMCMC(Assembler):
                 ploidy=self.ploidy,
                 reads=reads,
                 read_counts=read_counts,
+                error_rate=error_rate,
                 inbreeding=self.inbreeding,
             )
 
@@ -112,6 +115,7 @@ class CallingMCMC(Assembler):
                 haplotypes=self.haplotypes,
                 reads=reads,
                 read_counts=read_counts,
+                error_rate=error_rate,
                 inbreeding=self.inbreeding,
                 n_steps=self.steps,
                 cache=True,

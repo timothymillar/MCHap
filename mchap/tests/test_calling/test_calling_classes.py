@@ -9,6 +9,7 @@ from mchap.calling.classes import (
     PosteriorGenotypeAllelesDistribution,
     GenotypeAllelesMultiTrace,
 )
+from mchap.io.util import PFEIFFER_ERROR
 from mchap.testing import simulate_reads
 from mchap.jitutils import seed_numba, genotype_alleles_as_index
 from mchap.combinatorics import count_unique_genotypes
@@ -57,7 +58,10 @@ def test_CallingMCMC__gibbs_mh_equivalence(seed):
         ploidy=ploidy, haplotypes=haplotypes, inbreeding=inbreeding, steps=10050
     )
     gibbs_genotype, gibbs_genotype_prob, gibbs_phenotype_prob = (
-        model.fit(reads, read_counts).burn(50).posterior().mode(phenotype=True)
+        model.fit(reads, read_counts=read_counts, error_rate=PFEIFFER_ERROR)
+        .burn(50)
+        .posterior()
+        .mode(phenotype=True)
     )
 
     # MH sampler
@@ -69,7 +73,10 @@ def test_CallingMCMC__gibbs_mh_equivalence(seed):
         step_type="Metropolis-Hastings",
     )
     mh_genotype, mh_genotype_prob, mh_phenotype_prob = (
-        model.fit(reads, read_counts).burn(50).posterior().mode(phenotype=True)
+        model.fit(reads, read_counts=read_counts, error_rate=PFEIFFER_ERROR)
+        .burn(50)
+        .posterior()
+        .mode(phenotype=True)
     )
 
     # check results are equivalent
@@ -123,7 +130,10 @@ def test_CallingMCMC__DenovoMCMC_equivalence(seed):
         fix_homozygous=1,
     )
     denovo_phenotype = (
-        model.fit(reads, read_counts=read_counts).burn(500).posterior().mode_phenotype()
+        model.fit(reads, read_counts=read_counts, error_rate=PFEIFFER_ERROR)
+        .burn(500)
+        .posterior()
+        .mode_phenotype()
     )
     denovo_phen_prob = denovo_phenotype.probabilities.sum()
     idx = np.argmax(denovo_phenotype.probabilities)
@@ -137,7 +147,10 @@ def test_CallingMCMC__DenovoMCMC_equivalence(seed):
         ploidy=ploidy, haplotypes=haplotypes, inbreeding=inbreeding, steps=10500
     )
     call_alleles, call_genotype_prob, call_phenotype_prob = (
-        model.fit(reads, read_counts).burn(500).posterior().mode(phenotype=True)
+        model.fit(reads, read_counts=read_counts, error_rate=PFEIFFER_ERROR)
+        .burn(500)
+        .posterior()
+        .mode(phenotype=True)
     )
 
     # check results are equivalent
@@ -169,7 +182,7 @@ def test_CallingMCMC__zero_reads():
     ploidy = 4
     inbreeding = 0.01
     n_haps, n_pos = haplotypes.shape
-    reads = np.empty((0, n_pos, 2))
+    reads = np.empty((0, n_pos), np.int8)
     read_counts = np.array([], int)
 
     model = CallingMCMC(
@@ -179,7 +192,7 @@ def test_CallingMCMC__zero_reads():
         steps=n_steps,
         chains=n_chains,
     )
-    trace = model.fit(reads, read_counts)
+    trace = model.fit(reads, read_counts=read_counts, error_rate=PFEIFFER_ERROR)
     _, call_genotype_prob, call_phenotype_prob = (
         trace.burn(n_burn).posterior().mode(phenotype=True)
     )
@@ -202,7 +215,7 @@ def test_CallingMCMC__zero_snps():
     ploidy = 4
     inbreeding = 0.01
     _, n_pos = haplotypes.shape
-    reads = np.empty((0, n_pos, 2))
+    reads = np.empty((0, n_pos), np.int8)
     read_counts = np.array([], int)
 
     model = CallingMCMC(
@@ -212,7 +225,7 @@ def test_CallingMCMC__zero_snps():
         steps=n_steps,
         chains=n_chains,
     )
-    trace = model.fit(reads, read_counts)
+    trace = model.fit(reads, read_counts=read_counts, error_rate=PFEIFFER_ERROR)
     _, call_genotype_prob, call_phenotype_prob = (
         trace.burn(n_burn).posterior().mode(phenotype=True)
     )
@@ -246,7 +259,7 @@ def test_CallingMCMC__many_haplotype():
         steps=n_steps,
         chains=n_chains,
     )
-    trace = model.fit(reads, read_counts)
+    trace = model.fit(reads, read_counts=read_counts, error_rate=PFEIFFER_ERROR)
     alleles, call_genotype_prob, call_phenotype_prob = (
         trace.burn(n_burn).posterior().mode(phenotype=True)
     )

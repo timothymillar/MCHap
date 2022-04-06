@@ -94,7 +94,7 @@ class program(baseclass.program):
         Parameters
         ----------
         data : LocusAssemblyData
-            With sampledata fields: "read_dists_unique", "read_dist_counts".
+            With sampledata fields: "read_calls_unique", "read_calls_counts".
 
         Returns
         -------
@@ -120,8 +120,8 @@ class program(baseclass.program):
             # wrap in try clause to pass sample info back with any exception
             try:
                 # assembly MCMC
-                reads = data.sampledata["read_dists_unique"][sample]
-                read_counts = data.sampledata["read_dist_counts"][sample]
+                reads = data.sampledata["read_calls_unique"][sample]
+                read_counts = data.sampledata["read_calls_counts"][sample]
                 trace = (
                     DenovoMCMC(
                         ploidy=data.sample_ploidy[sample],
@@ -140,6 +140,7 @@ class program(baseclass.program):
                     .fit(
                         reads=reads,
                         read_counts=read_counts,
+                        error_rate=self.base_error_rate,
                     )
                     .burn(self.mcmc_burn)
                 )

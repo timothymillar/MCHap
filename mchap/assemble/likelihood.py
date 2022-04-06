@@ -28,7 +28,7 @@ def log_likelihood(reads, genotype, error_rate, read_counts=None):
         Set of haplotypes with base positions encoded
         as simple integers from 0 to n_nucl.
     error_rate : float
-        Expected base calling error rate
+        Expected base calling error rate.
     read_counts : ndarray, int, shape (n_reads, )
         Optionally specify the number of observations of
         each read.
