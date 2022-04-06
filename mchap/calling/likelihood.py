@@ -6,16 +6,20 @@ from mchap.jitutils import genotype_alleles_as_index
 
 
 @njit(cache=True)
-def log_likelihood_alleles(reads, read_counts, haplotypes, genotype_alleles):
+def log_likelihood_alleles(
+    reads, read_counts, error_rate, haplotypes, genotype_alleles
+):
     """Log-likelihood function for genotype alleles indexing a
     set of known haplotypes.
 
     Parameters
     ----------
-    reads : ndarray, float, shape (n_reads, n_pos, n_nucl)
-        Probabilistic reads.
+    reads : ndarray, float, shape (n_reads, n_pos)
+        Reads encoded as integers.
     read_counts : ndarray, int, shape (n_reads, )
         Count of each read.
+    error_rate : float
+        Expected base calling error rate
     haplotypes : ndarray, int, shape (n_haplotypes, n_pos)
         Integer encoded haplotypes.
     genotype_alleles : ndarray, int, shape (ploidy, )
@@ -29,22 +33,25 @@ def log_likelihood_alleles(reads, read_counts, haplotypes, genotype_alleles):
     return log_likelihood(
         reads=reads,
         genotype=haplotypes[genotype_alleles],
+        error_rate=error_rate,
         read_counts=read_counts,
     )
 
 
 @njit(cache=True)
 def log_likelihood_alleles_cached(
-    reads, read_counts, haplotypes, genotype_alleles, cache=None
+    reads, read_counts, error_rate, haplotypes, genotype_alleles, cache=None
 ):
     """
     Cached log-likelihood function for genotype alleles indexing a
     set of known haplotypes.
     ----------
-    reads : ndarray, float, shape (n_reads, n_pos, n_nucl)
-        Probabilistic reads.
+    reads : ndarray, float, shape (n_reads, n_pos)
+        Reads encoded as integers.
     read_counts : ndarray, int, shape (n_reads, )
         Count of each read.
+    error_rate : float
+        Expected base calling error rate
     haplotypes : ndarray, int, shape (n_haplotypes, n_pos)
         Integer encoded haplotypes.
     genotype_alleles : ndarray, int, shape (ploidy, )
@@ -60,6 +67,7 @@ def log_likelihood_alleles_cached(
         llk = log_likelihood_alleles(
             reads=reads,
             read_counts=read_counts,
+            error_rate=error_rate,
             haplotypes=haplotypes,
             genotype_alleles=genotype_alleles,
         )
@@ -71,6 +79,7 @@ def log_likelihood_alleles_cached(
             llk = log_likelihood_alleles(
                 reads=reads,
                 read_counts=read_counts,
+                error_rate=error_rate,
                 haplotypes=haplotypes,
                 genotype_alleles=genotype_alleles,
             )

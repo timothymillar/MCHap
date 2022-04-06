@@ -34,10 +34,13 @@ def test_log_likelihood_alleles(seed):
         )
         read_counts = np.random.randint(1, 10, size=n_reads)
 
-        expect = log_likelihood(reads=reads, read_counts=read_counts, genotype=genotype)
+        expect = log_likelihood(
+            reads=reads, read_counts=read_counts, error_rate=0.0024, genotype=genotype
+        )
         actual = log_likelihood_alleles(
             reads=reads,
             read_counts=read_counts,
+            error_rate=0.0024,
             haplotypes=haplotypes,
             genotype_alleles=alleles,
         )
@@ -45,7 +48,9 @@ def test_log_likelihood_alleles(seed):
 
 
 @njit(cache=True)
-def _compare_cached_none_cached_likelihoods(reads, read_counts, haplotypes, genotypes):
+def _compare_cached_none_cached_likelihoods(
+    reads, read_counts, haplotypes, genotypes, error_rate=0.0024
+):
     cache = {}
     cache[-1] = np.nan
 
@@ -57,12 +62,14 @@ def _compare_cached_none_cached_likelihoods(reads, read_counts, haplotypes, geno
         expect[i] = log_likelihood_alleles(
             reads=reads,
             read_counts=read_counts,
+            error_rate=error_rate,
             haplotypes=haplotypes,
             genotype_alleles=genotypes[i],
         )
         actual[i] = log_likelihood_alleles_cached(
             reads=reads,
             read_counts=read_counts,
+            error_rate=error_rate,
             haplotypes=haplotypes,
             genotype_alleles=genotypes[i],
             cache=cache,
