@@ -4,6 +4,7 @@ import argparse
 from mchap.application import assemble
 from mchap.application import call
 from mchap.application import call_exact
+from mchap.application import call_pedigree
 from mchap import __version__
 
 
@@ -12,7 +13,7 @@ def main():
         "Bayesian assemby of micro-haplotypes in polyploids"
     )
 
-    subprograms = ["assemble", "call", "call-exact", "version"]
+    subprograms = ["assemble", "call", "call-exact", "call-pedigree", "version"]
     parser.add_argument(
         "program", nargs=1, choices=subprograms, help="Specify sub-program"
     )
@@ -30,6 +31,9 @@ def main():
             prog.cli(sys.argv).run_stdout()
         elif prog == "call-exact":
             prog = call_exact.program
+            prog.cli(sys.argv).run_stdout()
+        elif prog == "call-pedigree":
+            prog = call_pedigree.program
             prog.cli(sys.argv).run_stdout()
         elif prog == "version":
             print(__version__)
