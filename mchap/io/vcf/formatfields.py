@@ -88,6 +88,12 @@ MCAP = FormatField(
     type="Float",
     descr="Posterior probability of allele-presence from assembly MCMC",
 )
+PEDERR = FormatField(
+    id="PEDERR",
+    number=1,
+    type="Float",
+    descr="Posterior probability of pedigree error between an individual and its specified parents",
+)
 
 HEADER_FORMAT_FIELDS = dict(
     GT=GT,
@@ -110,6 +116,7 @@ HEADER_FORMAT_FIELDS = dict(
     MCI=MCI,
     KMERCOV=KMERCOV,
     MCAP=MCAP,
+    PEDERR=PEDERR,
 )
 
 
