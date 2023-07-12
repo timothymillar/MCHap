@@ -34,6 +34,12 @@ AF = InfoField(id="AF", number="A", type="Float", descr="Allele Frequency")
 AFP = InfoField(
     id="AFP", number="R", type="Float", descr="Posterior mean allele frequencies"
 )
+APP = InfoField(
+    id="APP",
+    number="R",
+    type="Float",
+    descr="Posterior probability of allele being present in population",
+)
 AFPRIOR = InfoField(
     id="AFPRIOR", number="R", type="Float", descr="Prior allele frequencies"
 )
@@ -77,6 +83,7 @@ HEADER_INFO_FIELDS = dict(
     AN=AN,
     AF=AF,
     AFP=AFP,
+    APP=APP,
     AFPRIOR=AFPRIOR,
     AA=AA,
     END=END,

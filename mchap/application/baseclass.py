@@ -76,7 +76,7 @@ class program(object):
             "END",
             "NVAR",
             "SNVPOS",
-        ] + [f for f in ["AFPRIOR", "AFP"] if f in self.report_fields]
+        ] + [f for f in ["AFPRIOR", "AFP", "APP"] if f in self.report_fields]
         return infofields
 
     def format_fields(self):
@@ -92,7 +92,7 @@ class program(object):
             "GPM",
             "PHPM",
             "MCI",
-        ] + [f for f in ["AFP", "DS", "GP", "GL"] if f in self.report_fields]
+        ] + [f for f in ["AFP", "APP", "DS", "GP", "GL"] if f in self.report_fields]
         return formatfields
 
     def loci(self):
@@ -324,6 +324,13 @@ class program(object):
                 pop_ploidy += ploidy
                 pop_total += freqs * ploidy
             data.infodata["AFP"] = (pop_total / pop_ploidy).round(self.precision)
+        if "APP" in data.infofields:
+            # 1 - probability of absence
+            pop_absence = np.ones(len(data.columndata["ALTS"]) + 1, float)
+            for presence in data.sampledata["APP"].values():
+                pop_absence *= 1 - presence
+            pop_presence = 1 - pop_absence
+            data.infodata["APP"] = pop_presence.round(self.precision)
         return data
 
     def call_locus(self, locus):
